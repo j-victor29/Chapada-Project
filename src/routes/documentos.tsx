@@ -1,27 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogHeader,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,166 +19,238 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Upload,
-  Download,
-  Trash2,
-  Search,
-  FileText,
-  GitBranch,
-  FolderOpen,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useGlobalSearch } from "@/contexts/SearchContext";
+import { Plus, Upload, Trash2, Download, History, FileText, Search, GitBranch, FolderOpen, FileUp } from "lucide-react";
+import { useDocumentos, useCategorias, useUploadDocumento, useDeleteDocumento, getDocumentoUrl, type Documento } from "@/lib/documentosStore";
 import { useProjetos } from "@/lib/projetosStore";
-import { addDocumento, deleteDocumento, useDocumentos, type DocumentoItem } from "@/lib/documentosStore";
-import { formatDate } from "@/lib/mockData";
 import { addNotification } from "@/lib/notificationsStore";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/documentos")({
   head: () => ({
     meta: [
       { title: "Biblioteca de Documentos — CHAPADA" },
-      { name: "description", content: "Gestão, upload e versionamento de documentos institucionais." },
+      { name: "description", content: "Organização institucional, categorização e versionamento de documentos." }
     ],
   }),
   component: DocumentosPage,
 });
 
-// Categorias locais para o formulário (fallback sem banco)
-const CATEGORIAS_PADRAO = [
-  "Relatório",
-  "Apresentação",
-  "Planilha Orçamentária",
-  "Projeto Base",
-  "Manual",
-  "Projeto Executivo",
-  "Contrato",
-  "Termo de Referência",
-  "Outros",
-];
+function safeFormatDate(dateStr?: string | null) {
+  if (!dateStr) return "—";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
 
-function fileIcon(nome: string) {
-  const ext = nome.split(".").pop()?.toLowerCase() ?? "";
-  if (["pdf"].includes(ext)) return "📄";
-  if (["xlsx", "xls", "csv"].includes(ext)) return "📊";
-  if (["doc", "docx"].includes(ext)) return "📝";
-  if (["ppt", "pptx"].includes(ext)) return "📋";
-  if (["zip", "rar"].includes(ext)) return "🗜️";
+function formatBytes(bytes?: number | null) {
+  if (bytes === undefined || bytes === null) return "—";
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+function getFileIcon(mimeType?: string | null, titulo?: string) {
+  const ext = (titulo?.split(".").pop() ?? "").toLowerCase();
+  const mime = (mimeType ?? "").toLowerCase();
+
+  if (ext === "pdf" || mime.includes("pdf")) return "📄";
+  if (["xlsx", "xls", "csv"].includes(ext) || mime.includes("excel") || mime.includes("spreadsheet") || mime.includes("csv")) return "📊";
+  if (["doc", "docx"].includes(ext) || mime.includes("word") || mime.includes("officedocument.wordprocessingml")) return "📝";
+  if (["ppt", "pptx"].includes(ext) || mime.includes("powerpoint") || mime.includes("officedocument.presentationml")) return "📋";
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext) || mime.includes("zip") || mime.includes("compressed")) return "🗜️";
   return "📎";
 }
 
+function CardListSkeleton() {
+  return (
+    <div className="space-y-3.5">
+      {[1, 2, 3, 4].map((i) => (
+        <Card key={i} className="border border-muted/80 bg-card rounded-xl overflow-hidden animate-pulse">
+          <CardContent className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-5 rounded-full" />
+                <Skeleton className="h-5 w-40 sm:w-64" />
+                <Skeleton className="h-4 w-10" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 self-end md:self-center">
+              <Skeleton className="h-9 w-9 rounded-lg" />
+              <Skeleton className="h-9 w-9 rounded-lg" />
+              <Skeleton className="h-9 w-9 rounded-lg" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+interface EmptyStateProps {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}
+
+function EmptyState({ icon: Icon, title, description }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center p-8 sm:p-12 border border-dashed border-muted rounded-2xl bg-card/50 backdrop-blur-md max-w-lg mx-auto my-8">
+      <div className="p-4 rounded-full bg-primary/10 mb-4 text-primary animate-pulse">
+        <Icon className="h-8 w-8" />
+      </div>
+      <h3 className="text-lg font-bold text-foreground mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+        {description}
+      </p>
+    </div>
+  );
+}
 function DocumentosPage() {
-  const docs = useDocumentos();
-  const projetos = useProjetos();
-  const { query } = useGlobalSearch();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const { data: docs, isLoading } = useDocumentos();
+  const { data: cats } = useCategorias();
+  const projs = useProjetos(); // useProjetos reads synchronously from the local store
+  
+  const upload = useUploadDocumento();
+  const del = useDeleteDocumento();
 
-  const [search, setSearch] = useState("");
-  const [fCategoria, setFCategoria] = useState("todos");
-  const [fProjeto, setFProjeto] = useState("todos");
+  const [open, setOpen] = useState(false);
+  const [novaVersao, setNovaVersao] = useState<Documento | null>(null);
+  
+  // Form draft state
+  const [draft, setDraft] = useState<{
+    titulo: string;
+    descricao: string;
+    categoria_id: string;
+    projeto_id: string;
+    file: File | null;
+    tags: string;
+  }>({
+    titulo: "",
+    descricao: "",
+    categoria_id: "none",
+    projeto_id: "none",
+    file: null,
+    tags: "",
+  });
 
-  // Upload modal
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [form, setForm] = useState({ projetoId: "", categoria: "", tagsRaw: "", documentoPaiId: "" });
-  const [saving, setSaving] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("todos");
+  const [filtroProjeto, setFiltroProjeto] = useState("todos");
+  
+  // Delete Dialog State
+  const [toDelete, setToDelete] = useState<Documento | null>(null);
+  // Version History Dialog State
+  const [viewingVersions, setViewingVersions] = useState<Documento | null>(null);
 
-  // Delete
-  const [toDelete, setToDelete] = useState<DocumentoItem | null>(null);
-
-  // Versões
-  const [viewingVersions, setViewingVersions] = useState<DocumentoItem | null>(null);
+  // Filters and Mappings
+  const docCats = useMemo(() => (cats ?? []).filter((c) => c.tipo === "documento"), [cats]);
+  const projMap = useMemo(() => new Map((projs ?? []).map((p) => [p.id, p.nome])), [projs]);
+  const catMap = useMemo(() => new Map((cats ?? []).map((c) => [c.id, c.nome])), [cats]);
 
   const filtered = useMemo(() => {
-    const q = (query + " " + search).trim().toLowerCase();
+    if (!docs) return [];
+    const q = busca.toLowerCase().trim();
     return docs.filter((d) => {
-      if (q && ![d.nome, d.projeto ?? "", d.categoria ?? "", (d.tags ?? []).join(" ")]
-        .join(" ").toLowerCase().includes(q)) return false;
-      if (fCategoria !== "todos" && d.categoria !== fCategoria) return false;
-      if (fProjeto !== "todos" && d.projeto_id !== fProjeto) return false;
+      // 1. Text Search (title, description, tags)
+      if (q) {
+        const matchesTitle = d.titulo.toLowerCase().includes(q);
+        const matchesDesc = (d.descricao ?? "").toLowerCase().includes(q);
+        const matchesTags = (d.tags ?? []).some(t => t.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesDesc && !matchesTags) return false;
+      }
+      // 2. Category Filter
+      if (filtroCategoria !== "todos" && d.categoria_id !== filtroCategoria) return false;
+      // 3. Project Filter
+      if (filtroProjeto !== "todos" && d.projeto_id !== filtroProjeto) return false;
+
       return true;
     });
-  }, [docs, query, search, fCategoria, fProjeto]);
+  }, [docs, busca, filtroCategoria, filtroProjeto]);
 
-  // Documentos raiz (sem pai) para listagem principal
-  const rootDocs = filtered.filter((d) => !d.documento_pai_id);
+  // Main / Root documents (documents that do not have a parent document)
+  const rootDocs = useMemo(() => {
+    return filtered.filter((d) => !d.documento_pai_id);
+  }, [filtered]);
 
-  // Versões de um documento
-  const versionsOf = (docId: string) =>
-    docs.filter((d) => d.documento_pai_id === docId || d.id === docId)
-        .sort((a, b) => (a.versao ?? 1) - (b.versao ?? 1));
-
-  const openPicker = () => fileRef.current?.click();
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máx. 50 MB).");
-      return;
-    }
-    setPendingFile(file);
-    setForm({ projetoId: "", categoria: "", tagsRaw: "", documentoPaiId: "" });
-    setUploadOpen(true);
+  // Get all versions (history) for a document
+  const versionsOf = (docId: string) => {
+    if (!docs) return [];
+    return docs
+      .filter((d) => d.documento_pai_id === docId || d.id === docId)
+      .sort((a, b) => b.versao - a.versao); // Sorted descending so newest is first
   };
 
-  const handleSave = async () => {
-    if (!pendingFile) return;
-    if (!form.categoria) {
-      toast.error("Selecione uma categoria.");
+  const submit = async () => {
+    if (!draft.titulo) {
+      toast.error("O título do documento é obrigatório");
       return;
     }
-    setSaving(true);
+    if (!draft.file && !novaVersao) {
+      toast.error("Você deve selecionar um arquivo");
+      return;
+    }
+
     try {
-      const tags = form.tagsRaw.split(",").map((t) => t.trim()).filter(Boolean);
-      await addDocumento({
-        file: pendingFile,
-        projetoId: form.projetoId || undefined,
-        categoria: form.categoria || undefined,
-        tags,
-        documentoPaiId: form.documentoPaiId || undefined,
+      await upload.mutateAsync({
+        titulo: draft.titulo,
+        descricao: draft.descricao || undefined,
+        categoria_id: draft.categoria_id === "none" ? null : draft.categoria_id || null,
+        projeto_id: draft.projeto_id === "none" ? null : draft.projeto_id || null,
+        file: draft.file!,
+        tags: draft.tags.split(",").map((s) => s.trim()).filter(Boolean),
+        documento_pai_id: novaVersao?.id ?? null,
       });
+
       addNotification({
         type: "atividade",
-        title: "Documento enviado",
-        body: pendingFile.name,
+        title: novaVersao ? "Nova versão enviada" : "Documento enviado",
+        body: `${draft.titulo} (v${novaVersao ? novaVersao.versao + 1 : 1})`,
       });
-      toast.success("Documento salvo na biblioteca.");
-      setPendingFile(null);
-      setUploadOpen(false);
+
+      toast.success(novaVersao ? "Nova versão enviada com sucesso!" : "Documento enviado com sucesso!");
+      setOpen(false);
+      setNovaVersao(null);
+      setDraft({ titulo: "", descricao: "", categoria_id: "none", projeto_id: "none", file: null, tags: "" });
     } catch (e: any) {
-      toast.error("Erro ao enviar: " + (e?.message ?? "Tente novamente."));
-    } finally {
-      setSaving(false);
+      toast.error(e.message ?? "Falha ao enviar documento");
     }
   };
 
-  const handleDownload = (doc: DocumentoItem) => {
-    const a = document.createElement("a");
-    a.href = doc.url;
-    a.download = doc.nome;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const baixar = async (doc: Documento) => {
+    if (!doc.storage_path) {
+      toast.error("Caminho do arquivo não encontrado");
+      return;
+    }
+    const url = await getDocumentoUrl(doc.storage_path);
+    if (url) {
+      window.open(url, "_blank");
+    } else {
+      toast.error("Falha ao gerar link de download");
+    }
   };
 
   const handleDelete = async () => {
     if (!toDelete) return;
     try {
-      await deleteDocumento(toDelete.id);
-      toast.success("Documento excluído.");
+      await del.mutateAsync(toDelete);
+      toast.success("Documento excluído com sucesso");
     } catch (e: any) {
-      toast.error("Erro ao excluir: " + (e?.message ?? ""));
+      toast.error(e.message ?? "Erro ao excluir documento");
     } finally {
       setToDelete(null);
     }
@@ -199,312 +258,381 @@ function DocumentosPage() {
 
   return (
     <AppLayout
-      title="Biblioteca de Documentos"
+      title="Biblioteca de documentos"
       subtitle="Organização institucional, categorização e versionamento"
       actions={
-        <>
-          <input
-            ref={fileRef}
-            type="file"
-            className="hidden"
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.zip,.rar"
-            onChange={onFileChange}
-          />
-          <Button onClick={openPicker} className="gap-2">
-            <Upload className="h-4 w-4" /> Enviar Documento
-          </Button>
-        </>
+        <Dialog
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) {
+              setNovaVersao(null);
+              setDraft({ titulo: "", descricao: "", categoria_id: "none", projeto_id: "none", file: null, tags: "" });
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button className="bg-primary hover:bg-primary/90 text-white font-medium flex items-center gap-1.5 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
+              <Plus className="h-4 w-4" /> Novo documento
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg rounded-xl border border-muted bg-card/95 backdrop-blur-md shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+                <FileUp className="h-5 w-5 text-primary animate-pulse" />
+                {novaVersao ? `Nova versão de "${novaVersao.titulo}"` : "Enviar documento"}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground text-sm">
+                Preencha as informações para organizar e versionar o documento na biblioteca institucional.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-title" className="text-sm font-semibold">Título *</Label>
+                <Input
+                  id="doc-title"
+                  placeholder="Ex: Relatório Final de Monitoramento Hídrico"
+                  value={draft.titulo}
+                  onChange={(e) => setDraft({ ...draft, titulo: e.target.value })}
+                  className="rounded-lg bg-background/50 focus-visible:ring-primary focus-visible:ring-offset-1"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-desc" className="text-sm font-semibold">Descrição</Label>
+                <Textarea
+                  id="doc-desc"
+                  placeholder="Forneça uma breve descrição do conteúdo deste arquivo..."
+                  value={draft.descricao}
+                  onChange={(e) => setDraft({ ...draft, descricao: e.target.value })}
+                  rows={3}
+                  className="rounded-lg bg-background/50 resize-none focus-visible:ring-primary focus-visible:ring-offset-1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="doc-cat" className="text-sm font-semibold">Categoria</Label>
+                  <Select
+                    value={draft.categoria_id}
+                    onValueChange={(v) => setDraft({ ...draft, categoria_id: v })}
+                  >
+                    <SelectTrigger id="doc-cat" className="rounded-lg bg-background/50 focus-visible:ring-primary focus-visible:ring-offset-1">
+                      <SelectValue placeholder="Sem categoria" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60 rounded-lg shadow-lg border">
+                      <SelectItem value="none">Sem categoria</SelectItem>
+                      {docCats.filter(c => c && c.id).map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="doc-proj" className="text-sm font-semibold">Projeto</Label>
+                  <Select
+                    value={draft.projeto_id}
+                    onValueChange={(v) => setDraft({ ...draft, projeto_id: v })}
+                  >
+                    <SelectTrigger id="doc-proj" className="rounded-lg bg-background/50 focus-visible:ring-primary focus-visible:ring-offset-1">
+                      <SelectValue placeholder="Sem projeto" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60 rounded-lg shadow-lg border">
+                      <SelectItem value="none">Sem projeto</SelectItem>
+                      {(projs ?? []).filter(p => p && p.id).map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-tags" className="text-sm font-semibold">Tags (separe por vírgula)</Label>
+                <Input
+                  id="doc-tags"
+                  placeholder="ex: hídrico, relatório final, 2024"
+                  value={draft.tags}
+                  onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
+                  className="rounded-lg bg-background/50 focus-visible:ring-primary focus-visible:ring-offset-1"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-file" className="text-sm font-semibold">Arquivo *</Label>
+                <div className="relative flex items-center justify-center border-2 border-dashed border-muted hover:border-primary/50 transition-colors duration-200 rounded-xl bg-background/30 p-5 text-center cursor-pointer">
+                  <Input
+                    id="doc-file"
+                    type="file"
+                    onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="space-y-1">
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                    <p className="text-sm font-medium text-foreground">
+                      {draft.file ? draft.file.name : "Clique para selecionar ou arraste o arquivo"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {draft.file ? `${formatBytes(draft.file.size)} - ${draft.file.type}` : "PDF, Word, Excel, PowerPoint, ZIP (Máx. 50MB)"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0 mt-2">
+              <Button variant="outline" onClick={() => setOpen(false)} className="rounded-lg border-muted hover:bg-accent">
+                Cancelar
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={upload.isPending}
+                className="bg-primary text-white hover:bg-primary/95 rounded-lg font-semibold px-5"
+              >
+                {upload.isPending ? "Enviando..." : "Enviar documento"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       }
     >
-      {/* Filtros */}
-      <Card className="mb-4">
-        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar documento..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Select value={fCategoria} onValueChange={setFCategoria}>
-            <SelectTrigger>
-              <SelectValue placeholder="Categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todas as categorias</SelectItem>
-              {CATEGORIAS_PADRAO?.filter(c => c && String(c).trim() !== "").map((c) => (
-                <SelectItem key={c} value={String(c)}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={fProjeto} onValueChange={setFProjeto}>
-            <SelectTrigger>
-              <SelectValue placeholder="Projeto" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os projetos</SelectItem>
-              {projetos?.filter(p => p.id && String(p.id).trim() !== "").map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      {/* Tabela */}
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Documento</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Projeto</TableHead>
-                <TableHead>Tags</TableHead>
-                <TableHead>Versão</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rootDocs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
-                    <FileText className="h-10 w-10 mx-auto mb-3 text-muted" />
-                    {docs.length === 0
-                      ? 'Biblioteca vazia. Clique em "Enviar Documento" para começar.'
-                      : "Nenhum documento encontrado com os filtros selecionados."}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rootDocs.map((doc) => {
-                  const totalVersions = docs.filter(
-                    (d) => d.documento_pai_id === doc.id
-                  ).length;
-                  return (
-                    <TableRow key={doc.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{fileIcon(doc.nome)}</span>
-                          <div>
-                            <div className="font-medium text-sm">{doc.nome}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {doc.categoria ? (
-                          <Badge variant="secondary" className="text-[10px]">{doc.categoria}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {doc.projeto || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {(doc.tags ?? []).slice(0, 3).map((t) => (
-                            <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Badge variant="secondary" className="text-[10px]">
-                            v{doc.versao ?? 1}
-                          </Badge>
-                          {totalVersions > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setViewingVersions(doc)}
-                              className="text-xs text-primary hover:underline flex items-center gap-0.5"
-                            >
-                              <GitBranch className="h-3 w-3" />
-                              +{totalVersions}
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {doc.created_at ? formatDate(doc.created_at.slice(0, 10)) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => handleDownload(doc)} title="Download">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon" variant="ghost"
-                            onClick={() => {
-                              setPendingFile(null);
-                              setForm({ projetoId: doc.projeto_id ?? "", categoria: doc.categoria ?? "", tagsRaw: (doc.tags ?? []).join(", "), documentoPaiId: doc.id });
-                              setUploadOpen(true);
-                            }}
-                            title="Enviar nova versão"
-                          >
-                            <GitBranch className="h-4 w-4 text-primary" />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => setToDelete(doc)} title="Excluir">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Modal de Upload */}
-      <Dialog open={uploadOpen} onOpenChange={(o) => { if (!o) { setPendingFile(null); setUploadOpen(false); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {form.documentoPaiId ? "Enviar Nova Versão" : "Novo Documento"}
-            </DialogTitle>
-            <DialogDescription>
-              {pendingFile
-                ? `Arquivo: ${pendingFile.name}`
-                : form.documentoPaiId
-                ? "Selecione o arquivo para a nova versão do documento."
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Seleção de arquivo se não carregado */}
-            {!pendingFile && (
-              <div>
-                <Label>Arquivo</Label>
-                <div
-                  className="mt-2 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Clique para selecionar</p>
-                </div>
-              </div>
-            )}
-
-            {pendingFile && (
-              <div className="rounded-lg bg-muted p-3 flex items-center gap-3">
-                <span className="text-2xl">{fileIcon(pendingFile.name)}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{pendingFile.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(pendingFile.size / 1024).toFixed(0)} KB
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <Label>Categoria</Label>
-              <Select value={form.categoria} onValueChange={(v) => setForm((f) => ({ ...f, categoria: v }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIAS_PADRAO?.filter(c => c && String(c).trim() !== "").map((c) => (
-                    <SelectItem key={c} value={String(c)}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Projeto (opcional)</Label>
-              <Select value={form.projetoId} onValueChange={(v) => setForm((f) => ({ ...f, projetoId: v }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projetos?.filter(p => p.id && String(p.id).trim() !== "").map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Tags (separadas por vírgula)</Label>
+      <div className="space-y-4">
+        {/* Filter Section */}
+        <Card className="border border-muted/80 bg-card/60 backdrop-blur-md shadow-sm rounded-xl overflow-hidden">
+          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                className="mt-1"
-                placeholder="ex: hídrico, relatório final, 2024"
-                value={form.tagsRaw}
-                onChange={(e) => setForm((f) => ({ ...f, tagsRaw: e.target.value }))}
+                placeholder="Buscar por título, descrição ou tag..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="pl-9 bg-background/50 rounded-lg focus-visible:ring-primary focus-visible:ring-offset-1 border-muted"
               />
             </div>
+            <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+              <SelectTrigger className="bg-background/50 rounded-lg border-muted focus-visible:ring-primary focus-visible:ring-offset-1">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 rounded-lg shadow-lg border">
+                <SelectItem value="todos">Todas as categorias</SelectItem>
+                {docCats.filter(c => c && c.id).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filtroProjeto} onValueChange={setFiltroProjeto}>
+              <SelectTrigger className="bg-background/50 rounded-lg border-muted focus-visible:ring-primary focus-visible:ring-offset-1">
+                <SelectValue placeholder="Projeto" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 rounded-lg shadow-lg border">
+                <SelectItem value="todos">Todos os projetos</SelectItem>
+                {(projs ?? []).filter(p => p && p.id).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
 
-            {form.documentoPaiId && (
-              <div className="text-xs text-muted-foreground flex items-center gap-1 bg-primary/5 rounded px-3 py-2">
-                <GitBranch className="h-3 w-3 text-primary" />
-                Nova versão do documento original
-              </div>
-            )}
+        {/* Loading and List State */}
+        {isLoading ? (
+          <CardListSkeleton count={4} />
+        ) : rootDocs.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="Nenhum documento encontrado"
+            description={
+              busca || filtroCategoria !== "todos" || filtroProjeto !== "todos"
+                ? "Experimente mudar as palavras-chave ou remover os filtros aplicados."
+                : "Envie o primeiro documento institucional para iniciar a biblioteca."
+            }
+          />
+        ) : (
+          <div className="grid gap-3.5">
+            {rootDocs.map((doc) => {
+              const allVersions = versionsOf(doc.id);
+              const totalVersions = allVersions.length;
+              return (
+                <Card
+                  key={doc.id}
+                  className="border border-muted/80 bg-card hover:bg-card/90 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 rounded-xl overflow-hidden group"
+                >
+                  <CardContent className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        <span className="text-2xl leading-none select-none shrink-0">
+                          {getFileIcon(doc.mime_type, doc.titulo)}
+                        </span>
+                        <span className="font-semibold text-base text-foreground truncate max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl group-hover:text-primary transition-colors duration-200">
+                          {doc.titulo}
+                        </span>
+                        <Badge variant="secondary" className="bg-secondary/40 text-secondary-foreground font-semibold px-2 py-0.5 rounded text-xs select-none">
+                          v{doc.versao}
+                        </Badge>
+                        {doc.categoria_id && catMap.has(doc.categoria_id) && (
+                          <Badge variant="outline" className="border-primary/20 text-primary font-medium px-2 py-0.5 rounded text-[10px] select-none">
+                            {catMap.get(doc.categoria_id)}
+                          </Badge>
+                        )}
+                        {doc.projeto_id && projMap.has(doc.projeto_id) && (
+                          <Badge variant="outline" className="border-muted-foreground/35 text-muted-foreground font-medium px-2 py-0.5 rounded text-[10px] select-none">
+                            {projMap.get(doc.projeto_id)}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {doc.descricao && (
+                        <p className="text-sm text-muted-foreground/90 mt-1.5 line-clamp-2 leading-relaxed">
+                          {doc.descricao}
+                        </p>
+                      )}
+
+                      {/* Document Details & Tags */}
+                      <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-muted-foreground">
+                        <span>Tamanho: {formatBytes(doc.tamanho)}</span>
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground/45" />
+                        <span>Criado: {safeFormatDate(doc.created_at)}</span>
+                        {doc.tags && doc.tags.length > 0 && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-muted-foreground/45" />
+                            <div className="flex gap-1 flex-wrap">
+                              {doc.tags.map((t) => (
+                                <Badge key={t} variant="outline" className="text-[9px] bg-background/50 hover:bg-background/80 transition-colors py-0 px-1.5 border-muted font-normal text-muted-foreground select-none">
+                                  #{t}
+                                </Badge>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions Panel */}
+                    <div className="flex items-center gap-1 shrink-0 self-end md:self-center border-t md:border-t-0 pt-3 md:pt-0 border-muted">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => baixar(doc)}
+                        title="Baixar documento"
+                        className="h-9 w-9 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setNovaVersao(doc);
+                          setDraft({
+                            titulo: doc.titulo,
+                            descricao: doc.descricao ?? "",
+                            categoria_id: doc.categoria_id ?? "none",
+                            projeto_id: doc.projeto_id ?? "none",
+                            file: null,
+                            tags: (doc.tags ?? []).join(", "),
+                          });
+                          setOpen(true);
+                        }}
+                        title="Enviar nova versão"
+                        className="h-9 w-9 rounded-lg hover:bg-secondary/20 hover:text-secondary-foreground text-primary transition-all duration-200"
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+
+                      {totalVersions > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setViewingVersions(doc)}
+                          title="Histórico de versões"
+                          className="h-9 w-9 rounded-lg hover:bg-accent hover:text-accent-foreground text-foreground transition-all duration-200"
+                        >
+                          <GitBranch className="h-4 w-4 text-purple-600" />
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setToDelete(doc)}
+                        title="Excluir documento"
+                        className="h-9 w-9 rounded-lg hover:bg-destructive/10 text-destructive hover:text-destructive transition-all duration-200"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
+        )}
+      </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setPendingFile(null); setUploadOpen(false); }}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} disabled={saving || !pendingFile}>
-              {saving ? "Enviando..." : "Salvar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Versões */}
+      {/* Modal: View Version History */}
       <Dialog open={!!viewingVersions} onOpenChange={(o) => !o && setViewingVersions(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg rounded-xl border border-muted bg-card/95 backdrop-blur-md shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
               <FolderOpen className="h-5 w-5 text-primary" />
-              Versões — {viewingVersions?.nome}
+              Versões — {viewingVersions?.titulo}
             </DialogTitle>
-            <DialogDescription>Histórico de versões deste documento</DialogDescription>
+            <DialogDescription className="text-muted-foreground text-xs">
+              Histórico completo de versões deste documento, ordenadas da mais recente para a mais antiga.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            {viewingVersions && versionsOf(viewingVersions.id).map((v) => (
-              <div key={v.id} className="flex items-center justify-between border rounded-lg px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium flex items-center gap-2">
-                    <Badge variant="secondary">v{v.versao}</Badge>
-                    <span className="text-muted-foreground text-xs">
-                      {v.created_at ? formatDate(v.created_at.slice(0, 10)) : "—"}
-                    </span>
+          <div className="space-y-2.5 py-3 max-h-[50vh] overflow-y-auto pr-1">
+            {viewingVersions &&
+              versionsOf(viewingVersions.id).map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between border border-muted/80 rounded-xl px-4 py-3 bg-background/50 hover:bg-background/80 transition-colors"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="text-sm font-semibold flex items-center gap-2 mb-0.5">
+                      <Badge variant="secondary" className="px-1.5 py-0 rounded bg-secondary/50 font-bold text-xs select-none">
+                        v{v.versao}
+                      </Badge>
+                      <span className="text-muted-foreground text-xs font-normal">
+                        Criado em: {safeFormatDate(v.created_at)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate max-w-xs">
+                      {v.titulo} ({formatBytes(v.tamanho)})
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{v.nome}</div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => baixar(v)}
+                    className="gap-1.5 rounded-lg border-muted hover:bg-accent text-xs font-semibold shrink-0"
+                  >
+                    <Download className="h-3 w-3" /> Baixar
+                  </Button>
                 </div>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => handleDownload(v)}>
-                  <Download className="h-3 w-3" /> Baixar
-                </Button>
-              </div>
-            ))}
+              ))}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmar deleção */}
+      {/* Alert Dialog: Confirm Deletion */}
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-xl border border-muted bg-card/95 backdrop-blur-md shadow-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              &quot;{toDelete?.nome}&quot; será removido permanentemente. Esta ação não pode ser desfeita.
+            <AlertDialogTitle className="text-lg font-bold text-foreground">Excluir documento permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground text-sm">
+              O documento &quot;{toDelete?.titulo}&quot; e suas informações de metadados serão apagados permanentemente do banco de dados e do servidor de arquivos. Essa ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="rounded-lg border-muted hover:bg-accent">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-lg font-semibold px-5"
             >
               Excluir
             </AlertDialogAction>
