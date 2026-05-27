@@ -11,6 +11,8 @@ export interface ImagemItem {
   dataIso?: string;     // ISO para ordenação
   url: string;          // URL pública do Supabase Storage
   nomeArquivo: string;
+  categoriaId?: string;   // uuid FK para categorias
+  categoriaNome?: string; // nome da categoria (para exibição)
   // legacy compat – dataUrl agora é um alias de url
   dataUrl?: string;
 }
@@ -18,6 +20,36 @@ export interface ImagemItem {
 // ─── State ────────────────────────────────────────────────────────────────────
 let imagens: ImagemItem[] = [];
 let initialized = false;
+
+// ─── Categorias State ──────────────────────────────────────────────────────────────
+export interface CategoriaItem {
+  id: string;
+  nome: string;
+}
+let categorias: CategoriaItem[] = [];
+let categoriasInitialized = false;
+
+const categoriasListeners = new Set<() => void>();
+const subscribeC = (cb: () => void) => {
+  categoriasListeners.add(cb);
+  return () => { categoriasListeners.delete(cb); };
+};
+const emitC = () => categoriasListeners.forEach((l) => l());
+
+export const initCategorias = async () => {
+  if (categoriasInitialized) return;
+  categoriasInitialized = true;
+  const { data, error } = await supabase
+    .from("categorias" as any)
+    .select("id, nome")
+    .order("nome", { ascending: true });
+  if (error) {
+    console.error("[imagensStore] categorias init error:", error);
+    return;
+  }
+  categorias = (data ?? []).map((r: any) => ({ id: r.id, nome: r.nome }));
+  emitC();
+};
 
 const listeners = new Set<() => void>();
 
@@ -47,6 +79,8 @@ function rowToImagem(row: any): ImagemItem {
     dataIso: row.data ?? "",
     url: row.url ?? "",
     nomeArquivo: row.nome ?? "",
+    categoriaId: row.categoria_id ?? undefined,
+    categoriaNome: row.nome_categoria ?? undefined,
     dataUrl: row.url ?? "",
   };
 }
@@ -56,10 +90,13 @@ export const initImagens = async () => {
   if (initialized) return;
   initialized = true;
 
-  // Join arquivos_midia with projetos to get the project name
+  // Also boot categorias in parallel
+  initCategorias();
+
+  // Join arquivos_midia with projetos and categorias
   const { data, error } = await supabase
     .from("arquivos_midia" as any)
-    .select("*, projetos(nome)")
+    .select("*, projetos(nome), categorias(nome)")
     .eq("tipo_arquivo", "imagem")
     .order("created_at", { ascending: false });
 
@@ -71,7 +108,8 @@ export const initImagens = async () => {
   imagens = (data ?? []).map((row) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nomeProjeto = (row as any).projetos?.nome ?? "";
-    return rowToImagem({ ...row, nome_projeto: nomeProjeto });
+    const nomeCategoria = (row as any).categorias?.nome ?? undefined;
+    return rowToImagem({ ...row, nome_projeto: nomeProjeto, nome_categoria: nomeCategoria });
   });
   emit();
 };
@@ -82,6 +120,7 @@ export interface AddImagemPayload {
   file: File;
   projeto: string;     // nome (display)
   projetoId?: string;  // uuid
+  categoriaId?: string; // uuid
   local: string;
   tipo: string;
   date: string; // ISO date yyyy-mm-dd
@@ -113,6 +152,7 @@ export const addImagem = async (payload: AddImagemPayload): Promise<string> => {
     .from("arquivos_midia" as any)
     .insert({
       projeto_id: payload.projetoId || null,
+      categoria_id: payload.categoriaId || null,
       nome: payload.file.name,
       tipo_acao: payload.tipo || null,
       data: payload.date || null,
@@ -120,7 +160,7 @@ export const addImagem = async (payload: AddImagemPayload): Promise<string> => {
       url: publicUrl,
       tipo_arquivo: "imagem",
     })
-    .select("*, projetos(nome)")
+    .select("*, projetos(nome), categorias(nome)")
     .single();
 
   if (dbError || !rowData) {
@@ -130,7 +170,8 @@ export const addImagem = async (payload: AddImagemPayload): Promise<string> => {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nomeProjeto = (rowData as any).projetos?.nome ?? payload.projeto;
-  const nova = rowToImagem({ ...rowData, nome_projeto: nomeProjeto });
+  const nomeCategoria = (rowData as any).categorias?.nome ?? undefined;
+  const nova = rowToImagem({ ...rowData, nome_projeto: nomeProjeto, nome_categoria: nomeCategoria });
   imagens = [nova, ...imagens];
   emit();
   return nova.id;
@@ -138,10 +179,11 @@ export const addImagem = async (payload: AddImagemPayload): Promise<string> => {
 
 export const updateImagem = async (
   id: string,
-  patch: Partial<Pick<ImagemItem, "projeto" | "local" | "tipo" | "date" | "projetoId">>
+  patch: Partial<Pick<ImagemItem, "projeto" | "local" | "tipo" | "date" | "projetoId" | "categoriaId">>
 ) => {
   const updatePayload: Record<string, unknown> = {};
   if (patch.projetoId !== undefined) updatePayload.projeto_id = patch.projetoId;
+  if (patch.categoriaId !== undefined) updatePayload.categoria_id = patch.categoriaId || null;
   if (patch.local !== undefined) updatePayload.local = patch.local;
   if (patch.tipo !== undefined) updatePayload.tipo_acao = patch.tipo;
   if (patch.date !== undefined) {
@@ -201,5 +243,17 @@ export const useImagens = (): ImagemItem[] => {
     subscribe,
     () => imagens,
     () => imagens
+  );
+};
+
+export const useCategorias = (): CategoriaItem[] => {
+  useEffect(() => {
+    initCategorias();
+  }, []);
+
+  return useSyncExternalStore(
+    subscribeC,
+    () => categorias,
+    () => categorias
   );
 };

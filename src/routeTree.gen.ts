@@ -22,6 +22,7 @@ import { Route as CriarSenhaRouteImport } from './routes/criar-senha'
 import { Route as CadastrosRouteImport } from './routes/cadastros'
 import { Route as AuditoriaRouteImport } from './routes/auditoria'
 import { Route as AtividadesRouteImport } from './routes/atividades'
+import { Route as AcoesIndependentesRouteImport } from './routes/acoes-independentes'
 import { Route as IndexRouteImport } from './routes/index'
 
 const UsuariosRoute = UsuariosRouteImport.update({
@@ -89,6 +90,11 @@ const AtividadesRoute = AtividadesRouteImport.update({
   path: '/atividades',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AcoesIndependentesRoute = AcoesIndependentesRouteImport.update({
+  id: '/acoes-independentes',
+  path: '/acoes-independentes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -97,6 +103,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/acoes-independentes': typeof AcoesIndependentesRoute
   '/atividades': typeof AtividadesRoute
   '/auditoria': typeof AuditoriaRoute
   '/cadastros': typeof CadastrosRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/acoes-independentes': typeof AcoesIndependentesRoute
   '/atividades': typeof AtividadesRoute
   '/auditoria': typeof AuditoriaRoute
   '/cadastros': typeof CadastrosRoute
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/acoes-independentes': typeof AcoesIndependentesRoute
   '/atividades': typeof AtividadesRoute
   '/auditoria': typeof AuditoriaRoute
   '/cadastros': typeof CadastrosRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/acoes-independentes'
     | '/atividades'
     | '/auditoria'
     | '/cadastros'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/acoes-independentes'
     | '/atividades'
     | '/auditoria'
     | '/cadastros'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/acoes-independentes'
     | '/atividades'
     | '/auditoria'
     | '/cadastros'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AcoesIndependentesRoute: typeof AcoesIndependentesRoute
   AtividadesRoute: typeof AtividadesRoute
   AuditoriaRoute: typeof AuditoriaRoute
   CadastrosRoute: typeof CadastrosRoute
@@ -305,6 +318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AtividadesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/acoes-independentes': {
+      id: '/acoes-independentes'
+      path: '/acoes-independentes'
+      fullPath: '/acoes-independentes'
+      preLoaderRoute: typeof AcoesIndependentesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -317,6 +337,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AcoesIndependentesRoute: AcoesIndependentesRoute,
   AtividadesRoute: AtividadesRoute,
   AuditoriaRoute: AuditoriaRoute,
   CadastrosRoute: CadastrosRoute,

@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Trash2,
   Pencil,
+  Filter,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,6 +47,7 @@ import {
   removeImagem,
   updateImagem,
   useImagens,
+  useCategorias,
   type ImagemItem,
 } from "@/lib/imagensStore";
 import { useProjetos } from "@/lib/projetosStore";
@@ -86,10 +88,11 @@ interface PendingFile {
   previewUrl: string; // local object URL for preview only
 }
 
-const emptyForm = { projetoId: "", projetoNome: "", local: "", tipo: "", date: "" };
+const emptyForm = { projetoId: "", projetoNome: "", local: "", tipo: "", date: "", categoriaId: "" };
 
 function ImagensPage() {
   const imgs = useImagens();
+  const categorias = useCategorias();
   const projetos = useProjetos();
   const { query } = useGlobalSearch();
   const { email: currentEmail, name: currentName } = useCurrentUser();
@@ -97,6 +100,7 @@ function ImagensPage() {
   const [toDelete, setToDelete] = useState<ImagemItem | null>(null);
   const [editing, setEditing] = useState<ImagemItem | null>(null);
   const editingOwnership = useOwnership("imagem", editing?.id ?? "");
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingFile | null>(null);
@@ -105,14 +109,17 @@ function ImagensPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return imgs;
-    return imgs.filter((i) =>
-      [i.projeto, i.local, i.tipo, i.date, i.nomeArquivo]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [imgs, query]);
+    return imgs.filter((i) => {
+      const matchesQuery = !q ||
+        [i.projeto, i.local, i.tipo, i.date, i.nomeArquivo, i.categoriaNome]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      const matchesCategoria =
+        !categoriaFiltro || i.categoriaId === categoriaFiltro;
+      return matchesQuery && matchesCategoria;
+    });
+  }, [imgs, query, categoriaFiltro]);
 
   const openPicker = () => fileInputRef.current?.click();
 
@@ -147,6 +154,7 @@ function ImagensPage() {
         file: pending.file,
         projeto: form.projetoNome,
         projetoId: form.projetoId || undefined,
+        categoriaId: form.categoriaId || undefined,
         local: form.local,
         tipo: form.tipo,
         date: form.date,
@@ -185,6 +193,7 @@ function ImagensPage() {
       local: img.local,
       tipo: img.tipo,
       date: isoDate,
+      categoriaId: img.categoriaId ?? "",
     });
   };
 
@@ -202,6 +211,7 @@ function ImagensPage() {
     try {
       await updateImagem(editing.id, {
         projetoId: form.projetoId || undefined,
+        categoriaId: form.categoriaId || undefined,
         local: form.local,
         tipo: form.tipo,
         date: form.date,
@@ -273,11 +283,45 @@ function ImagensPage() {
         </>
       }
     >
+      {/* ── Barra de filtro por categoria ─────────────────────────── */}
+      {categorias.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+          <button
+            onClick={() => setCategoriaFiltro(null)}
+            className={[
+              "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+              categoriaFiltro === null
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:border-primary hover:text-foreground",
+            ].join(" ")}
+          >
+            Todas
+          </button>
+          {categorias.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() =>
+                setCategoriaFiltro(categoriaFiltro === cat.id ? null : cat.id)
+              }
+              className={[
+                "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                categoriaFiltro === cat.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:border-primary hover:text-foreground",
+              ].join(" ")}
+            >
+              {cat.nome}
+            </button>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground text-sm">
-            {query
-              ? "Nenhuma imagem encontrada para esta busca."
+            {query || categoriaFiltro
+              ? "Nenhuma imagem encontrada para este filtro."
               : imgs.length === 0
               ? 'Nenhuma imagem na galeria. Clique em "Enviar Imagens" para começar.'
               : "Carregando galeria..."}
@@ -330,9 +374,16 @@ function ImagensPage() {
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {img.local} · {img.date}
                 </div>
-                <Badge variant="secondary" className="text-[10px] mt-2">
-                  {img.tipo}
-                </Badge>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {img.tipo}
+                  </Badge>
+                  {img.categoriaNome && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {img.categoriaNome}
+                    </Badge>
+                  )}
+                </div>
                 {(() => {
                   const o = getOwnership("imagem", img.id);
                   return o ? (
@@ -396,6 +447,26 @@ function ImagensPage() {
                 </SelectContent>
               </Select>
             </div>
+            {categorias.length > 0 && (
+              <div>
+                <Label>Categoria Temática</Label>
+                <Select
+                  value={form.categoriaId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, categoriaId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Município / Local</Label>
               <Select

@@ -10,6 +10,7 @@ import {
   FileText,
   Database,
   ShieldAlert,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import chapadaLogo from "@/assets/chapada-logo.png";
@@ -17,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/lib/profileStore";
 
 type NavItem = {
-  to: "/" | "/projetos" | "/atividades" | "/imagens" | "/indicadores" | "/tecnologias" | "/usuarios" | "/documentos" | "/cadastros" | "/auditoria";
+  to: "/" | "/projetos" | "/atividades" | "/acoes-independentes" | "/imagens" | "/indicadores" | "/tecnologias" | "/usuarios" | "/documentos" | "/cadastros" | "/auditoria";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -27,6 +28,7 @@ const nav: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/projetos", label: "Projetos", icon: FolderKanban },
   { to: "/atividades", label: "Atividades", icon: ClipboardList },
+  { to: "/acoes-independentes", label: "Ações Independentes", icon: Zap },
   { to: "/imagens", label: "Banco de Imagens", icon: Images },
   { to: "/indicadores", label: "Indicadores", icon: BarChart3 },
   { to: "/tecnologias", label: "Tecnologias Sociais", icon: Sprout },

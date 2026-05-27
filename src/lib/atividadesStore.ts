@@ -40,6 +40,20 @@ const subscribe = (cb: () => void) => {
 
 const emit = () => listeners.forEach((l) => l());
 
+let atividadesIndependentes: AtividadeFull[] = [];
+let initializedIndependentes = false;
+
+const listenersIndependentes = new Set<() => void>();
+
+const subscribeIndependentes = (cb: () => void) => {
+  listenersIndependentes.add(cb);
+  return () => {
+    listenersIndependentes.delete(cb);
+  };
+};
+
+const emitIndependentes = () => listenersIndependentes.forEach((l) => l());
+
 const sortDesc = (arr: AtividadeFull[]) =>
   [...arr].sort((x, y) => y.data.localeCompare(x.data));
 
@@ -69,6 +83,7 @@ export const initAtividades = async () => {
   const { data, error } = await supabase
     .from("atividades")
     .select("*")
+    .not("projeto_id", "is", null)
     .order("data", { ascending: false });
 
   if (error) {
@@ -78,6 +93,25 @@ export const initAtividades = async () => {
 
   atividades = sortDesc((data ?? []).map(rowToAtividade));
   emit();
+};
+
+export const initAtividadesIndependentes = async () => {
+  if (initializedIndependentes) return;
+  initializedIndependentes = true;
+
+  const { data, error } = await supabase
+    .from("atividades")
+    .select("*")
+    .is("projeto_id", null)
+    .order("data", { ascending: false });
+
+  if (error) {
+    console.error("[atividadesStore] init independentes error:", error);
+    return;
+  }
+
+  atividadesIndependentes = sortDesc((data ?? []).map(rowToAtividade));
+  emitIndependentes();
 };
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -105,8 +139,13 @@ export const addAtividade = async (
   }
 
   const novo = rowToAtividade(data);
-  atividades = sortDesc([novo, ...atividades]);
-  emit();
+  if (novo.projetoId) {
+    atividades = sortDesc([novo, ...atividades]);
+    emit();
+  } else {
+    atividadesIndependentes = sortDesc([novo, ...atividadesIndependentes]);
+    emitIndependentes();
+  }
   return novo.id;
 };
 
@@ -115,7 +154,7 @@ export const updateAtividade = async (
   patch: Partial<AtividadeFull>
 ) => {
   const updatePayload: Record<string, unknown> = {};
-  if (patch.projetoId !== undefined) updatePayload.projeto_id = patch.projetoId;
+  if (patch.projetoId !== undefined) updatePayload.projeto_id = patch.projetoId || null;
   if (patch.data !== undefined) updatePayload.data = patch.data;
   if (patch.tipo !== undefined) updatePayload.tipo = patch.tipo;
   if (patch.descricao !== undefined) updatePayload.descricao = patch.descricao;
@@ -134,10 +173,18 @@ export const updateAtividade = async (
     throw error;
   }
 
-  atividades = sortDesc(
-    atividades.map((a) => (a.id === id ? { ...a, ...patch, editado: true } : a))
-  );
-  emit();
+  if (patch.projetoId || atividades.some((a) => a.id === id)) {
+    atividades = sortDesc(
+      atividades.map((a) => (a.id === id ? { ...a, ...patch, editado: true } : a))
+    );
+    emit();
+  }
+  if (!patch.projetoId || atividadesIndependentes.some((a) => a.id === id)) {
+    atividadesIndependentes = sortDesc(
+      atividadesIndependentes.map((a) => (a.id === id ? { ...a, ...patch, editado: true } : a))
+    );
+    emitIndependentes();
+  }
 };
 
 export const deleteAtividade = async (id: string) => {
@@ -148,6 +195,8 @@ export const deleteAtividade = async (id: string) => {
   }
   atividades = atividades.filter((a) => a.id !== id);
   emit();
+  atividadesIndependentes = atividadesIndependentes.filter((a) => a.id !== id);
+  emitIndependentes();
 };
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -161,6 +210,18 @@ export const useAtividades = (): AtividadeFull[] => {
     subscribe,
     () => atividades,
     () => atividades
+  );
+};
+
+export const useAtividadesIndependentes = (): AtividadeFull[] => {
+  useEffect(() => {
+    initAtividadesIndependentes();
+  }, []);
+
+  return useSyncExternalStore(
+    subscribeIndependentes,
+    () => atividadesIndependentes,
+    () => atividadesIndependentes
   );
 };
 
@@ -190,3 +251,4 @@ export const useAtividadesIndicadores = () => {
     }
   );
 };
+
