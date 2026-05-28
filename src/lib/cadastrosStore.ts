@@ -7,6 +7,9 @@ export interface Municipio {
   uf: string;
   regiao?: string | null;
   created_at?: string;
+  codigo_ibge?: string | null;
+  estado?: string | null;
+  microrregiao?: string | null;
 }
 
 export interface Comunidade {

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Pencil, Search } from "lucide-react";
+import { Plus, Trash2, Pencil, Search, X, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Municipios, Comunidades, Financiadores, Categorias, Publicos, Familias
@@ -186,6 +187,175 @@ function CrudShell({
   );
 }
 
+interface IbgeSearchProps {
+  state: any;
+  onChange: (updated: any) => void;
+}
+
+function IbgeMunicipiosSearch({ state, onChange }: IbgeSearchProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+
+  const { data: ibgeMunicipios = [], isLoading: loadingIbge } = useQuery({
+    queryKey: ["ibge-municipios"],
+    queryFn: async () => {
+      const res = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/municipios");
+      if (!res.ok) throw new Error("Erro ao buscar municípios do IBGE");
+      return res.json() as Promise<any[]>;
+    },
+    staleTime: 1000 * 60 * 30, // 30 minutos de cache
+  });
+
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const lower = searchTerm.toLowerCase().trim();
+    return ibgeMunicipios
+      .filter((m: any) => {
+        const nameMatch = m.nome.toLowerCase().includes(lower);
+        const ufMatch = m.microrregiao?.mesorregiao?.UF?.sigla?.toLowerCase() === lower;
+        return nameMatch || ufMatch;
+      })
+      .slice(0, 100); // limite de 100 resultados para performance
+  }, [ibgeMunicipios, searchTerm]);
+
+  const hasSelection = !!state.codigo_ibge;
+
+  if (hasSelection) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center bg-primary/5 border border-primary/20 rounded-lg p-3">
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Município Selecionado</span>
+            <div className="font-semibold text-sm text-foreground">{state.nome} — {state.estado || state.uf}</div>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 px-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1"
+            onClick={() => {
+              onChange({
+                ...state,
+                codigo_ibge: "",
+                nome: "",
+                uf: "",
+                estado: "",
+                regiao: "",
+                microrregiao: ""
+              });
+              setSearchTerm("");
+            }}
+          >
+            <X className="h-3.5 w-3.5" /> Limpar
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Nome</Label>
+            <Input value={state.nome ?? ""} readOnly className="bg-muted/40 cursor-not-allowed font-medium" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Estado (UF)</Label>
+            <Input value={state.estado || state.uf || ""} readOnly className="bg-muted/40 cursor-not-allowed font-medium" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Microrregião</Label>
+            <Input value={state.microrregiao || state.regiao || ""} readOnly className="bg-muted/40 cursor-not-allowed font-medium" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Código IBGE</Label>
+            <Input value={state.codigo_ibge ?? ""} readOnly className="bg-muted/40 cursor-not-allowed font-medium" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 relative">
+      <Label htmlFor="ibge-search-input">Buscar Município (Brasil inteiro)</Label>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          id="ibge-search-input"
+          placeholder={loadingIbge ? "Carregando municípios do Brasil..." : "Digite o nome da cidade (Ex: Ouricuri, Petrolina...)"}
+          className="pl-9 pr-8 bg-background"
+          value={searchTerm}
+          disabled={loadingIbge}
+          onFocus={() => setIsOpen(true)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setIsOpen(true);
+          }}
+        />
+        {loadingIbge && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+        )}
+        {!loadingIbge && searchTerm && (
+          <button 
+            type="button"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            onClick={() => { setSearchTerm(""); setIsOpen(false); }}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && searchTerm.trim() && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md z-20 divide-y divide-border/55">
+            {filtered.length > 0 ? (
+              filtered.map((mun: any) => {
+                const ufSigla = mun.microrregiao?.mesorregiao?.UF?.sigla || "";
+                const microNome = mun.microrregiao?.nome || "";
+                return (
+                  <button
+                    key={mun.id}
+                    type="button"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
+                    onClick={() => {
+                      onChange({
+                        ...state,
+                        codigo_ibge: String(mun.id),
+                        nome: mun.nome,
+                        uf: ufSigla,
+                        estado: ufSigla,
+                        regiao: microNome,
+                        microrregiao: microNome,
+                      });
+                      setIsOpen(false);
+                      setSearchTerm("");
+                    }}
+                  >
+                    <div>
+                      <span className="font-medium text-foreground">{mun.nome}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">— {ufSigla}</span>
+                    </div>
+                    {microNome && (
+                      <span className="text-[10px] bg-muted/60 text-muted-foreground px-2 py-0.5 rounded-full font-normal">
+                        {microNome}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                Nenhum município encontrado
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function MunicipiosTab() {
   const { data } = Municipios.useList();
   const upsert = Municipios.useUpsert();
@@ -198,26 +368,14 @@ function MunicipiosTab() {
       columns={[
         { label: "Nome", key: "nome" },
         { label: "UF", key: "uf" },
-        { label: "Região", key: "regiao" }
+        { label: "Microrregião", key: "microrregiao" },
+        { label: "Código IBGE", key: "codigo_ibge" }
       ]}
       getId={(r) => r.id}
-      getRowValues={(r) => r}
-      blank={{ nome: "", uf: "PE", regiao: "" }}
+      getRowValues={(r) => ({ ...r, microrregiao: r.microrregiao || r.regiao || "" })}
+      blank={{ nome: "", uf: "", regiao: "", codigo_ibge: "", estado: "", microrregiao: "" }}
       renderForm={(s, set) => (
-        <>
-          <div className="space-y-1">
-            <Label htmlFor="mun-nome">Nome</Label>
-            <Input id="mun-nome" value={s.nome ?? ""} onChange={(e) => set({ ...s, nome: e.target.value })} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="mun-uf">UF</Label>
-            <Input id="mun-uf" value={s.uf ?? "PE"} maxLength={2} onChange={(e) => set({ ...s, uf: e.target.value.toUpperCase() })} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="mun-regiao">Região</Label>
-            <Input id="mun-regiao" value={s.regiao ?? ""} onChange={(e) => set({ ...s, regiao: e.target.value })} />
-          </div>
-        </>
+        <IbgeMunicipiosSearch state={s} onChange={set} />
       )}
       onSave={(s) => upsert.mutateAsync(s)}
       onDelete={(id) => del.mutateAsync(id)}
