@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -165,14 +166,23 @@ function AcoesIndependentesPage() {
     setVisible(PAGE_SIZE);
   }, [query]);
 
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const loadMore = useCallback(() => {
     if (loading || !hasMore) return;
     setLoading(true);
-    setTimeout(() => {
+    loadTimerRef.current = setTimeout(() => {
       setVisible((v) => Math.min(v + PAGE_SIZE, total));
       setLoading(false);
     }, 200);
   }, [loading, hasMore, total]);
+
+  // Cleanup timer on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (loadTimerRef.current !== null) clearTimeout(loadTimerRef.current);
+    };
+  }, []);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -526,13 +536,11 @@ function AcoesIndependentesPage() {
                   ).map(([key, label]) => (
                     <div key={key}>
                       <Label className="text-xs">{label}</Label>
-                      <Input
-                        type="number"
-                        min={0}
+                      <CurrencyInput
                         step={1}
-                        value={form[key]}
-                        onChange={(e) =>
-                          setF(key)(e.target.value.replace(/[^\d]/g, ""))
+                        value={form[key] !== "" ? Number(form[key]) : undefined}
+                        onChange={(v) =>
+                          setF(key)(v !== undefined ? String(v) : "")
                         }
                       />
                     </div>

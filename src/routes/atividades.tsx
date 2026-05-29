@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -70,7 +72,20 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/atividades")({
   head: () => ({ meta: [{ title: "Atividades — CHAPADA" }] }),
-  component: AtividadesPage,
+  component: () => (
+    <Suspense
+      fallback={
+        <AppLayout title="Atividades" subtitle="Registro de atividades e indicadores">
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+        </AppLayout>
+      }
+    >
+      <AtividadesPage />
+    </Suspense>
+  ),
 });
 
 const PAGE_SIZE = 10;
@@ -171,14 +186,23 @@ function AtividadesPage() {
     setVisible(PAGE_SIZE);
   }, [query]);
 
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const loadMore = useCallback(() => {
     if (loading || !hasMore) return;
     setLoading(true);
-    setTimeout(() => {
+    loadTimerRef.current = setTimeout(() => {
       setVisible((v) => Math.min(v + PAGE_SIZE, total));
       setLoading(false);
     }, 200);
   }, [loading, hasMore, total]);
+
+  // Cleanup timer on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (loadTimerRef.current !== null) clearTimeout(loadTimerRef.current);
+    };
+  }, []);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -553,13 +577,11 @@ function AtividadesPage() {
                   ).map(([key, label]) => (
                     <div key={key}>
                       <Label className="text-xs">{label}</Label>
-                      <Input
-                        type="number"
-                        min={0}
+                      <CurrencyInput
                         step={1}
-                        value={form[key]}
-                        onChange={(e) =>
-                          setF(key)(e.target.value.replace(/[^\d]/g, ""))
+                        value={form[key] !== "" ? Number(form[key]) : undefined}
+                        onChange={(v) =>
+                          setF(key)(v !== undefined ? String(v) : "")
                         }
                       />
                     </div>

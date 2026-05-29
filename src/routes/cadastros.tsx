@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -14,10 +15,24 @@ import {
   Municipios, Comunidades, Financiadores, Categorias, Publicos, Familias
 } from "@/lib/cadastrosStore";
 import { toast } from "sonner";
+import { useDebounce } from "@/hooks/use-debounce";
 
 export const Route = createFileRoute("/cadastros")({
   head: () => ({ meta: [{ title: "Cadastros — CHAPADA" }] }),
-  component: CadastrosPage,
+  component: () => (
+    <Suspense
+      fallback={
+        <AppLayout title="Cadastros institucionais" subtitle="Municípios, comunidades, financiadores, categorias, públicos e famílias">
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+        </AppLayout>
+      }
+    >
+      <CadastrosPage />
+    </Suspense>
+  ),
 });
 
 function CadastrosPage() {
@@ -61,7 +76,8 @@ function CrudShell({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<any>(blank);
-  const [search, setSearch] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
+  const search = useDebounce(localSearch, 300);
 
   const filteredItems = useMemo(() => {
     if (!items) return [];
@@ -88,8 +104,8 @@ function CrudShell({
               <Input
                 placeholder={`Buscar...`}
                 className="pl-9 bg-muted/20"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
               />
             </div>
             
@@ -194,6 +210,7 @@ interface IbgeSearchProps {
 
 function IbgeMunicipiosSearch({ state, onChange }: IbgeSearchProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 400);
   const [isOpen, setIsOpen] = useState(false);
 
   const { data: ibgeMunicipios = [], isLoading: loadingIbge } = useQuery({
@@ -207,8 +224,8 @@ function IbgeMunicipiosSearch({ state, onChange }: IbgeSearchProps) {
   });
 
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const lower = searchTerm.toLowerCase().trim();
+    if (!debouncedSearchTerm.trim()) return [];
+    const lower = debouncedSearchTerm.toLowerCase().trim();
     return ibgeMunicipios
       .filter((m: any) => {
         const nameMatch = m.nome.toLowerCase().includes(lower);
@@ -216,7 +233,7 @@ function IbgeMunicipiosSearch({ state, onChange }: IbgeSearchProps) {
         return nameMatch || ufMatch;
       })
       .slice(0, 100); // limite de 100 resultados para performance
-  }, [ibgeMunicipios, searchTerm]);
+  }, [ibgeMunicipios, debouncedSearchTerm]);
 
   const hasSelection = !!state.codigo_ibge;
 

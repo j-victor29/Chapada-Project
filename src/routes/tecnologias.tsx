@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -431,7 +432,7 @@ function TecnologiaModal({
 
           <div className="space-y-1.5">
             <Label>Quantidade implementada</Label>
-            <Input type="number" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} />
+            <CurrencyInput step={1} value={quantidade !== "" ? Number(quantidade) : undefined} onChange={(v) => setQuantidade(v !== undefined ? String(v) : "")} />
           </div>
           <div className="space-y-1.5">
             <Label>Unidade</Label>
@@ -452,7 +453,7 @@ function TecnologiaModal({
           {meta.mostraFamilias && (
             <div className="space-y-1.5">
               <Label>Famílias beneficiadas</Label>
-              <Input type="number" value={familias} onChange={(e) => setFamilias(e.target.value)} />
+              <CurrencyInput step={1} value={familias !== "" ? Number(familias) : undefined} onChange={(v) => setFamilias(v !== undefined ? String(v) : "")} />
             </div>
           )}
 

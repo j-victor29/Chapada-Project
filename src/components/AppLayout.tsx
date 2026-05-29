@@ -23,6 +23,7 @@ import {
   type NotificationType,
 } from "@/lib/notificationsStore";
 import { ProfileModal } from "./ProfileModal";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const typeIcon: Record<NotificationType, ReactNode> = {
   atividade: <ClipboardList className="h-4 w-4 text-primary" />,
@@ -59,6 +60,13 @@ export function AppLayout({
   const notifications = useNotifications();
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  
+  const [localQuery, setLocalQuery] = useState(query);
+  const debouncedQuery = useDebounce(localQuery, 300);
+
+  useEffect(() => {
+    setQuery(debouncedQuery);
+  }, [debouncedQuery, setQuery]);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -69,6 +77,7 @@ export function AppLayout({
   // Clear global search whenever route mounts a new AppLayout (per-page reset)
   useEffect(() => {
     setQuery("");
+    setLocalQuery("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
 
@@ -99,8 +108,8 @@ export function AppLayout({
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               placeholder="Buscar nesta página..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={localQuery}
+              onChange={(e) => setLocalQuery(e.target.value)}
               className="bg-transparent outline-none text-sm flex-1 placeholder:text-muted-foreground"
             />
           </div>

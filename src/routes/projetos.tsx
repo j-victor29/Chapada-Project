@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, lazy, Suspense } from "react";
 import { AppLayout } from "@/components/AppLayout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -79,7 +81,20 @@ export const Route = createFileRoute("/projetos")({
       { name: "description", content: "Cadastro e gestão de projetos institucionais." },
     ],
   }),
-  component: ProjetosPage,
+  component: () => (
+    <Suspense
+      fallback={
+        <AppLayout title="Projetos" subtitle="Cadastro e gestão de projetos institucionais">
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+        </AppLayout>
+      }
+    >
+      <ProjetosPage />
+    </Suspense>
+  ),
 });
 
 const STATUS: ProjetoStatus[] = ["Em execução", "Concluído", "Suspenso"];
@@ -270,11 +285,10 @@ function ProjetosPage() {
               </div>
               <div>
                 <Label>Valor Total (R$)</Label>
-                <Input
-                  type="number"
+                <CurrencyInput
                   value={editing.valor}
-                  onChange={(e) =>
-                    setEditing({ ...editing, valor: Number(e.target.value) || 0 })
+                  onChange={(v) =>
+                    setEditing({ ...editing, valor: v || 0 })
                   }
                 />
               </div>
@@ -306,11 +320,10 @@ function ProjetosPage() {
                         key={m.id}
                         type="button"
                         onClick={() => toggleMun(m.nome)}
-                        className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                          sel
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background hover:bg-accent border-border"
-                        }`}
+                        className={`px-3 py-1 rounded-full text-xs border transition-colors ${sel
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background hover:bg-accent border-border"
+                          }`}
                       >
                         {m.nome}
                       </button>
@@ -320,11 +333,11 @@ function ProjetosPage() {
               </div>
               <div>
                 <Label>Público Atendido (quantitativo)</Label>
-                <Input
-                  type="number"
+                <CurrencyInput
+                  step={1}
                   value={editing.publicoQuant}
-                  onChange={(e) =>
-                    setEditing({ ...editing, publicoQuant: Number(e.target.value) || 0 })
+                  onChange={(v) =>
+                    setEditing({ ...editing, publicoQuant: v || 0 })
                   }
                 />
               </div>
